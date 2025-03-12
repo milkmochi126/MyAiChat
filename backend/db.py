@@ -16,10 +16,11 @@ def get_all_characters():
     try:
         # 如果沒有API密鑰，嘗試使用公共角色API
         if not API_KEY:
-            print("警告: 未設置API密鑰，使用公共角色API")
+            print(f"警告: 未設置API密鑰，使用公共角色API，URL: {API_BASE_URL}/public-characters")
             response = requests.get(f"{API_BASE_URL}/public-characters")
         else:
             # 使用 api_key 查詢參數進行授權
+            print(f"使用API密鑰訪問: {API_BASE_URL}/characters，密鑰ID：{API_KEY[:4]}***")
             response = requests.get(f"{API_BASE_URL}/characters?includeAll=true&api_key={API_KEY}")
         
         if response.status_code == 200:
@@ -43,7 +44,7 @@ def get_all_characters():
             print(f"從 API 獲取到 {len(characters)} 個角色")
             return characters
         else:
-            print(f"API 請求失敗: {response.status_code}")
+            print(f"API 請求失敗: {response.status_code}, 響應內容: {response.text[:100]}")
             return []
     except Exception as e:
         print(f"獲取角色時出錯: {e}")

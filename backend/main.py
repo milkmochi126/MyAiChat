@@ -48,7 +48,7 @@ def load_character_settings():
             print(f"✅ 成功載入角色: {character['name']} (ID: {character['id']})")
         return settings
     except Exception as e:
-        print(f"❌ 從 API 載入角色時發生錯誤: {str(e)}")
+        print(f"載入角色設定時出錯: {str(e)}")
         return {}
 
 # 載入角色設定
@@ -240,3 +240,26 @@ def shutdown_db():
             loop.run_until_complete(memory_manager.disconnect())
     except Exception as e:
         print(f"關閉資料庫連接時出錯: {str(e)}")
+
+# 添加根路由
+@app.get("/")
+async def root():
+    """根路由，返回API狀態信息"""
+    frontend_url = os.environ.get("FRONTEND_API_URL", "未設置")
+    api_key_status = "已設置" if os.environ.get("BACKEND_API_KEY") else "未設置"
+    model_handlers = ModelFactory.get_supported_models()
+    
+    return {
+        "status": "在線",
+        "api_version": "1.0",
+        "frontend_url": frontend_url,
+        "backend_api_key": api_key_status,
+        "loaded_characters": len(CHARACTER_SETTINGS),
+        "supported_models": list(model_handlers.keys()),
+        "endpoints": [
+            "/chat", 
+            "/memory", 
+            "/models",
+            "/characters"
+        ]
+    }
