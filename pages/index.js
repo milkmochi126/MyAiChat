@@ -3,13 +3,13 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import axios from "axios";
-import { getSafeUserId, getUserData, setUserData } from "../utils/userStorage";
+import { getSafeUserId } from "../utils/userStorage";
 
 export default function Home() {
   const { data: session } = useSession();
   const [chatList, setChatList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [backendStatus, setBackendStatus] = useState("本地模式");
+  const [backendStatus, setBackendStatus] = useState("數據庫模式");
   const router = useRouter();
   
   // 添加長按/右鍵選單狀態
@@ -34,11 +34,8 @@ export default function Home() {
   // 參考文檔對象，用於監聽點擊事件
   const documentRef = useRef(null);
 
-  // 檢查後端連線狀態 - 改為本地模式
+  // 檢查後端連線狀態
   useEffect(() => {
-    // 不再嘗試連接後端
-    setLoading(false);
-    
     // 設置文檔引用
     documentRef.current = document;
     
@@ -94,9 +91,6 @@ export default function Home() {
           
           // 更新聊天列表
           setChatList(fetchedChats);
-          
-          // 同時更新本地存儲
-          setUserData(userId, 'chatList', fetchedChats);
         } catch (apiError) {
           console.error('加載聊天列表失敗:', apiError);
           
@@ -106,9 +100,9 @@ export default function Home() {
             return;
           }
           
-          // 如果API請求失敗，嘗試從本地存儲加載
-          const localChats = getUserData(userId, 'chatList', []);
-          setChatList(localChats);
+          // 顯示錯誤信息給用戶
+          setChatList([]);
+          alert("無法從伺服器加載聊天記錄，請確認網路連接或重新登入");
         } finally {
           setLoading(false);
         }
@@ -148,27 +142,10 @@ export default function Home() {
         return;
       }
       
-      // 如果角色已被刪除，但我們有聊天ID，則使用聊天ID進入聊天頁面
-      if (!chat.characterId && chat.isDeleted) {
-        console.log(`開始與已刪除角色 ${chat.characterName} 的聊天，使用聊天ID: ${chat.id}`);
-        window.location.href = `/chat/${chat.id}?type=chat`;
-        return;
-      }
-      
-      // 檢查角色ID是否存在
-      if (!chat.characterId) {
-        console.error(`聊天 ${chat.id} 沒有關聯的角色ID`);
-        alert("無法開始聊天，找不到關聯的角色");
-        return;
-      }
-      
-      console.log(`開始與角色 ${chat.characterName} (${chat.characterId}) 的聊天`);
-      
-      // 使用 window.location.href 而不是 router.push，以確保頁面完全重新加載
-      window.location.href = `/chat/${chat.characterId}`;
+      // 跳轉到聊天頁面
+      router.push(`/chat/${chat.id}?type=chat`);
     } catch (error) {
-      console.error("開始聊天時出錯:", error);
-      alert("開始聊天時出錯，請稍後再試");
+      console.error('選擇聊天時出錯:', error);
     }
   };
   
@@ -325,6 +302,52 @@ export default function Home() {
     
     // 限制長度
     return content.length > 30 ? content.substring(0, 30) + '...' : content;
+  };
+
+  // 刪除聊天
+  const deleteChat = async (chatId) => {
+    try {
+      console.log(`嘗試刪除聊天: ${chatId}`);
+      
+      // 檢查 session 是否有效
+      if (!session) {
+        console.error('未登錄，無法刪除聊天');
+        alert("請先登入後再刪除聊天");
+        return;
+      }
+      
+      // 確認已輸入角色名稱
+      if (!deleteConfirm.inputName) {
+        console.error('未輸入確認名稱');
+        return;
+      }
+      
+      // 檢查輸入的名稱是否匹配
+      if (deleteConfirm.inputName !== deleteConfirm.characterName) {
+        console.error('輸入的名稱不匹配');
+        alert(`請輸入正確的角色名稱：${deleteConfirm.characterName}`);
+        return;
+      }
+      
+      // 調用API刪除聊天
+      await axios.delete(`/api/chats/${chatId}`);
+      
+      // 從列表中移除已刪除的聊天
+      setChatList(prev => prev.filter(chat => chat.id !== chatId));
+      
+      // 關閉確認對話框
+      setDeleteConfirm({
+        visible: false,
+        chatId: null,
+        characterName: "",
+        inputName: ""
+      });
+      
+      console.log(`聊天 ${chatId} 已成功刪除`);
+    } catch (error) {
+      console.error('刪除聊天時出錯:', error);
+      alert("刪除聊天時出錯，請重試");
+    }
   };
 
   if (loading) {

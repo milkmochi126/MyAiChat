@@ -433,6 +433,74 @@ export default function CharacterDetail() {
               </div>
             )}
           </div>
+          
+          {/* 角色屬性詳情 */}
+          <div className="bg-gray-800 rounded-lg p-6 shadow-lg md:col-span-2">
+            <h3 className="text-xl font-semibold mb-3 border-b border-gray-700 pb-2">角色詳細資料</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 基本屬性 */}
+              <div>
+                {character.age && (
+                  <div className="mb-4">
+                    <h4 className="text-lg font-medium text-blue-400 mb-1">年齡</h4>
+                    <p className="text-gray-300">{character.age}</p>
+                  </div>
+                )}
+                
+                {character.basicInfo && (
+                  <div className="mb-4">
+                    <h4 className="text-lg font-medium text-blue-400 mb-1">基本資料</h4>
+                    <p className="text-gray-300 whitespace-pre-line">{character.basicInfo}</p>
+                  </div>
+                )}
+                
+                {character.personality && (
+                  <div className="mb-4">
+                    <h4 className="text-lg font-medium text-blue-400 mb-1">性格特點</h4>
+                    <p className="text-gray-300 whitespace-pre-line">{character.personality}</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* 喜好和說話方式 */}
+              <div>
+                {character.speakingStyle && (
+                  <div className="mb-4">
+                    <h4 className="text-lg font-medium text-blue-400 mb-1">說話方式</h4>
+                    <p className="text-gray-300 whitespace-pre-line">{character.speakingStyle}</p>
+                  </div>
+                )}
+                
+                {character.likes && (
+                  <div className="mb-4">
+                    <h4 className="text-lg font-medium text-blue-400 mb-1">喜好</h4>
+                    <p className="text-gray-300">{character.likes}</p>
+                  </div>
+                )}
+                
+                {character.dislikes && (
+                  <div className="mb-4">
+                    <h4 className="text-lg font-medium text-blue-400 mb-1">厭惡</h4>
+                    <p className="text-gray-300">{character.dislikes}</p>
+                  </div>
+                )}
+                
+                {character.extraInfo && character.extraInfo.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-lg font-medium text-blue-400 mb-1">其他資料</h4>
+                    <div className="space-y-2">
+                      {character.extraInfo.map((item, index) => (
+                        <div key={index} className="bg-gray-700 p-2 rounded">
+                          <span className="font-medium">{item.title}:</span> {item.content}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

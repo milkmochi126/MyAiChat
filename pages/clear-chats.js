@@ -2,156 +2,124 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import axios from 'axios';
-import { getSafeUserId, setUserData } from '../utils/userStorage';
+import { getSafeUserId } from '../utils/userStorage';
 
-export default function ClearChats() {
+export default function ClearChatsPage() {
   const { data: session } = useSession();
-  const [chats, setChats] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
-  const [message, setMessage] = useState('');
   const router = useRouter();
-
-  // 載入聊天記錄
+  const [isClearing, setIsClearing] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [countdown, setCountdown] = useState(null);
+  
+  // 檢查用戶登錄狀態
   useEffect(() => {
-    const loadChats = async () => {
-      try {
-        if (!session) {
-          setMessage('請先登入以管理您的聊天記錄');
-          setLoading(false);
-          return;
-        }
-
-        // 從API獲取聊天列表
-        const response = await axios.get('/api/chats');
-        const fetchedChats = response.data;
-        
-        setChats(fetchedChats);
-        setMessage(`已找到 ${fetchedChats.length} 個聊天記錄`);
-      } catch (error) {
-        console.error('加載聊天列表失敗:', error);
-        setMessage('加載聊天列表失敗: ' + error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadChats();
-  }, [session]);
-
-  // 刪除單個聊天
-  const deleteChat = async (chatId) => {
+    if (!session && session !== undefined) {
+      // 未登錄用戶重定向到首頁
+      router.push('/');
+    }
+  }, [session, router]);
+  
+  // 處理清除聊天
+  const handleClearChats = async () => {
     try {
-      await axios.delete(`/api/chats/${chatId}`);
-      return true;
+      if (confirmText !== '我確定') {
+        alert('請輸入"我確定"以確認清除所有聊天');
+        return;
+      }
+      
+      setIsClearing(true);
+      
+      // 獲取用戶ID
+      const userId = getSafeUserId(session);
+      
+      // 呼叫API刪除所有聊天
+      await axios.delete('/api/chats?all=true');
+      
+      // 設置倒計時
+      setCountdown(3);
     } catch (error) {
-      console.error(`刪除聊天 ${chatId} 失敗:`, error);
-      return false;
+      console.error('清除聊天失敗:', error);
+      alert('清除聊天失敗，請稍後再試');
+      setIsClearing(false);
     }
   };
-
-  // 刪除所有聊天
-  const handleDeleteAll = async () => {
-    if (!confirm('確定要刪除所有聊天記錄嗎？此操作不可恢復！')) {
+  
+  // 處理倒計時
+  useEffect(() => {
+    if (countdown === null) return;
+    
+    if (countdown === 0) {
+      // 倒計時結束，跳轉到首頁
+      router.push('/');
       return;
     }
-
-    setDeleting(true);
-    setMessage('正在刪除所有聊天記錄...');
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const chat of chats) {
-      const success = await deleteChat(chat.id);
-      if (success) {
-        successCount++;
-      } else {
-        failCount++;
-      }
-      
-      // 更新進度消息
-      setMessage(`正在刪除聊天記錄... (${successCount}/${chats.length})`);
-    }
-
-    // 清空本地存儲中的聊天列表
-    if (session) {
-      const userId = getSafeUserId(session);
-      setUserData(userId, 'chatList', []);
-    }
-
-    setChats([]);
-    setDeleting(false);
-    setMessage(`刪除完成！成功: ${successCount}, 失敗: ${failCount}`);
-  };
-
-  // 返回首頁
-  const handleGoHome = () => {
-    router.push('/');
-  };
-
+    
+    // 每秒減少倒計時
+    const timer = setTimeout(() => {
+      setCountdown(countdown - 1);
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [countdown, router]);
+  
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">清理聊天記錄</h1>
+    <div className="container mx-auto px-4 py-8 max-w-md">
+      <h1 className="text-2xl font-bold mb-6 text-center">清除所有聊天</h1>
       
-      <div className="mb-4">
-        <p className={`mb-4 ${message.includes('失敗') ? 'text-red-500' : message.includes('成功') ? 'text-green-500' : ''}`}>
-          {message}
-        </p>
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="mb-6">
+          <p className="mb-2 text-red-600 font-semibold">警告：此操作將刪除所有聊天記錄！</p>
+          <p className="mb-4 text-gray-700">
+            這將永久刪除您的所有聊天記錄，但不會刪除您創建的角色。此操作無法撤銷。
+          </p>
+        </div>
         
-        <div className="flex space-x-4 mb-6">
-          <button
-            onClick={handleDeleteAll}
-            disabled={loading || deleting || chats.length === 0}
-            className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
-          >
-            {deleting ? '刪除中...' : '刪除所有聊天記錄'}
-          </button>
-          
-          <button
-            onClick={handleGoHome}
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-          >
-            返回首頁
-          </button>
-        </div>
-      </div>
-      
-      {loading ? (
-        <div className="flex justify-center">
-          <p>加載中...</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold mb-2">聊天記錄列表</h2>
-          
-          {chats.length === 0 ? (
-            <p>沒有聊天記錄</p>
-          ) : (
-            <div className="grid gap-4">
-              {chats.map(chat => (
-                <div key={chat.id} className="border p-4 rounded flex justify-between items-center">
-                  <div>
-                    <p><strong>角色:</strong> {chat.characterName}</p>
-                    <p><strong>ID:</strong> {chat.id}</p>
-                    <p><strong>最後訊息:</strong> {chat.lastMessage || '無訊息'}</p>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      if (await deleteChat(chat.id)) {
-                        setChats(chats.filter(c => c.id !== chat.id));
-                      }
-                    }}
-                    className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
-                  >
-                    刪除
-                  </button>
-                </div>
-              ))}
+        {isClearing ? (
+          <div className="text-center">
+            {countdown !== null ? (
+              <div>
+                <p className="text-green-600 mb-2">所有聊天記錄已清除！</p>
+                <p className="text-gray-600">{countdown} 秒後自動返回首頁...</p>
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-800"></div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">
+                請輸入"我確定"以確認清除：
+              </label>
+              <input
+                type="text"
+                className="w-full p-2 border rounded-md"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="我確定"
+              />
             </div>
-          )}
-        </div>
-      )}
+            
+            <div className="flex justify-between">
+              <button
+                className="bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md transition duration-300"
+                onClick={() => router.push('/')}
+              >
+                取消
+              </button>
+              <button
+                className="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-md transition duration-300"
+                onClick={handleClearChats}
+                disabled={confirmText !== '我確定'}
+              >
+                清除所有聊天
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 } 

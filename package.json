@@ -27,12 +27,13 @@
     "react-avatar-editor": "^13.0.2",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
-    "react-markdown": "^10.0.0",
+    "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "autoprefixer": "^10.4.20",
+    "dotenv-cli": "^8.0.0",
     "eslint": "^9",
     "eslint-config-next": "15.1.7",
     "postcss": "^8.5.3",

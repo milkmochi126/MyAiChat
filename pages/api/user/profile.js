@@ -41,9 +41,41 @@ export default async function handler(req, res) {
             return res.status(404).json({ error: "找不到用戶" });
           }
           
+          // 獲取用戶配置檔案
+          const userProfile = await prisma.userProfile.findUnique({
+            where: {
+              userId: session.user.id
+            },
+            select: {
+              apiKeys: true,
+              defaultModel: true
+            }
+          });
+          
+          // 合併數據
+          let responseData = {
+            ...user,
+            apiKeys: { gpt: "", claude: "", gemini: "" },
+            defaultModel: "gemini"
+          };
+          
+          if (userProfile) {
+            if (userProfile.apiKeys) {
+              try {
+                responseData.apiKeys = JSON.parse(userProfile.apiKeys);
+              } catch (e) {
+                console.error("API: 解析 API 金鑰失敗:", e);
+              }
+            }
+            
+            if (userProfile.defaultModel) {
+              responseData.defaultModel = userProfile.defaultModel;
+            }
+          }
+          
           console.log(`API: 找到用戶: ${user.name}`);
           
-          return res.status(200).json(user);
+          return res.status(200).json(responseData);
         } catch (queryError) {
           console.error("API: 查詢用戶資料時出錯:", queryError);
           return res.status(500).json({ error: "查詢用戶資料失敗", details: queryError.message });

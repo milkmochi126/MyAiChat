@@ -18,212 +18,85 @@ export default function Characters() {
   const router = useRouter();
 
   // 載入角色列表
-  useEffect(() => {
-    const fetchCharacters = async () => {
+  const loadCharacters = async () => {
+    try {
+      setLoading(true);
+      
+      if (!session) {
+        console.log('未登錄，清空角色列表');
+        setCharacters([]);
+        setLoading(false);
+        return;
+      }
+      
+      const userId = getSafeUserId(session);
+      
+      // 加載用戶的角色
       try {
-        setLoading(true);
+        // 加載用戶好友列表作為預處理
+        let userFriends = [];
+        try {
+          const friendsResponse = await axios.get('/api/user-friends');
+          userFriends = friendsResponse.data;
+          console.log('成功加載用戶好友列表:', userFriends.length);
+        } catch (friendsError) {
+          console.error('加載用戶好友列表失敗:', friendsError);
+        }
         
-        if (!session || window.isLoggingOut) {
-          console.log('未登錄或正在登出，清空角色列表');
-          setCharacters([]);
-          setLoading(false);
+        // 從API加載自己的角色
+        const myResponse = await axios.get('/api/characters?type=my');
+        let myCharactersData = myResponse.data;
+        
+        console.log('成功加載我的角色:', myCharactersData.length);
+        
+        // 標記我的角色
+        myCharactersData = myCharactersData.map(char => ({
+          ...char,
+          isMine: true
+        }));
+        
+        // 保存我的角色到臨時變量
+        const allCharacters = [...myCharactersData];
+        
+        // 從API加載公開角色
+        const publicResponse = await axios.get('/api/public-characters');
+        let publicCharactersData = publicResponse.data;
+        
+        console.log('成功加載公開角色:', publicCharactersData.length);
+        
+        // 標記已添加的角色
+        publicCharactersData = publicCharactersData.map(c => ({
+          ...c,
+          isFriend: userFriends.some(f => f.characterId === c.id)
+        }));
+        
+        // 過濾掉已經在「我的角色」中的角色，避免重複顯示
+        publicCharactersData = publicCharactersData.filter(c => !c.isMine);
+        
+        // 合併我的角色和公開角色
+        setCharacters([...allCharacters, ...publicCharactersData]);
+      } catch (apiError) {
+        console.error('API請求失敗:', apiError);
+        
+        if (apiError.response?.status === 401) {
+          console.log('未授權，可能是會話已過期');
+          alert('您的登入狀態已過期，請重新登入。');
           return;
         }
         
-        // 獲取用戶ID
-        const userId = getSafeUserId(session);
-        console.log('獲取角色列表，用戶ID:', userId);
-        
-        // 從API獲取公開角色數據
-        console.log('開始從API獲取公開角色數據');
-        try {
-          // 獲取公開角色
-          const publicResponse = await axios.get('/api/public-characters');
-          const publicCharacters = publicResponse.data || [];
-          console.log('API返回公開角色數據:', publicCharacters.length, '個角色');
-          
-          // 獲取用戶自己的角色
-          const myResponse = await axios.get('/api/characters');
-          const myOwnCharacters = myResponse.data || [];
-          console.log('API返回我的角色數據:', myOwnCharacters.length, '個角色');
-          
-          // 獲取用戶的好友列表
-          let userFriends = [];
-          try {
-            const friendsResponse = await axios.get('/api/user-friends');
-            userFriends = friendsResponse.data || [];
-            console.log('API返回好友數據:', userFriends.length, '個好友');
-            
-            // 更新本地存儲的好友列表
-            setUserData(userId, 'friendsList', userFriends);
-          } catch (friendsError) {
-            console.error('獲取好友列表失敗:', friendsError);
-            // 如果API請求失敗，嘗試從本地存儲獲取
-            userFriends = getUserData(userId, 'friendsList', []);
-            console.log('從本地存儲獲取好友列表:', userFriends.length, '個好友');
-          }
-          
-          // 合併角色列表（只包含公開的我的角色）
-          const publicMyCharacters = myOwnCharacters.filter(char => char.isPublic);
-          const allCharacters = [...publicMyCharacters, ...publicCharacters];
-          
-          // 如果沒有角色，直接設置空數組
-          if (!allCharacters || allCharacters.length === 0) {
-            console.log('沒有找到角色，設置空列表');
-            setCharacters([]);
-            setAvailableTags([]);
-            setLoading(false);
-            return;
-          }
-          
-          // 處理角色數據，確保tags是數組
-          console.log('開始處理角色數據');
-          const processedCharacters = allCharacters.map(character => {
-            if (!character || typeof character !== 'object') {
-              console.warn('無效的角色數據:', character);
-              return null;
-            }
-            
-            console.log('處理角色:', character.id, character.name);
-            
-            // 確保tags是數組
-            if (!character.tags) {
-              console.log('角色沒有tags屬性，設置為空數組');
-              character.tags = [];
-            } else if (!Array.isArray(character.tags)) {
-              console.warn(`角色 ${character.id} 的tags不是數組:`, character.tags);
-              character.tags = [];
-            }
-            
-            // 確保每個tag都有name屬性
-            character.tags = character.tags.map(tag => {
-              if (typeof tag === 'string') {
-                return { name: tag };
-              } else if (typeof tag === 'object' && tag !== null) {
-                return { name: tag.name || '未知標籤' };
-              } else {
-                return { name: '未知標籤' };
-              }
-            });
-            
-            // 標記是否是當前用戶的角色
-            character.isOwner = character.creatorId === session.user.id;
-            
-            // 標記是否是好友
-            character.isFriend = userFriends.some(friend => friend.id === character.id);
-            
-            return character;
-          }).filter(Boolean); // 過濾掉無效的角色
-          
-          // 收集所有可用的標籤
-          const tagSet = new Set();
-          processedCharacters.forEach(character => {
-            if (character.tags && Array.isArray(character.tags)) {
-              character.tags.forEach(tag => {
-                if (tag && tag.name) {
-                  tagSet.add(tag.name);
-                }
-              });
-            }
-          });
-          
-          // 設置可用標籤列表（排除性別標籤）
-          const filteredTags = Array.from(tagSet).filter(
-            tag => tag !== "男性" && tag !== "女性" && tag !== "其他"
-          );
-          setAvailableTags(filteredTags);
-          console.log('設置可用標籤:', filteredTags);
-          
-          // 設置角色列表
-          setCharacters(processedCharacters);
-          console.log('設置處理後的角色列表:', processedCharacters.length, '個角色');
-          
-          // 同時更新本地存儲
-          const myCharacters = processedCharacters.filter(char => char.isOwner);
-          
-          // 確保本地存儲的角色保留好友狀態
-          const existingMyCharacters = getUserData(userId, 'myCharacters', []);
-          const updatedMyCharacters = myCharacters.map(char => {
-            const existingChar = existingMyCharacters.find(c => c.id === char.id);
-            if (existingChar) {
-              // 保留現有的好友狀態，除非從API獲取的數據有更新
-              return {
-                ...char,
-                isFriend: char.isFriend !== undefined ? char.isFriend : existingChar.isFriend
-              };
-            }
-            return char;
-          });
-          
-          setUserData(userId, 'myCharacters', updatedMyCharacters);
-          console.log('更新本地存儲的我的角色:', updatedMyCharacters.length, '個角色');
-        } catch (apiError) {
-          console.error('API請求失敗:', apiError);
-          
-          // 如果是未授權錯誤且正在登出，則忽略
-          if (apiError.response?.status === 401 && window.isLoggingOut) {
-            console.log('正在登出，忽略未授權錯誤');
-            return;
-          }
-          
-          // 如果API請求失敗，嘗試從本地存儲加載
-          console.log('嘗試從本地存儲加載角色列表');
-          const localCharacters = getUserData(userId, 'myCharacters', []);
-          console.log('本地存儲中的角色:', localCharacters.length, '個角色');
-          
-          // 確保本地存儲的角色數據也經過處理
-          const processedLocalCharacters = localCharacters.map(character => {
-            if (!character || typeof character !== 'object') {
-              return null;
-            }
-            
-            if (!character.tags) {
-              character.tags = [];
-            } else if (!Array.isArray(character.tags)) {
-              character.tags = [];
-            }
-            
-            character.tags = character.tags.map(tag => {
-              if (typeof tag === 'string') {
-                return { name: tag };
-              } else if (typeof tag === 'object' && tag !== null) {
-                return { name: tag.name || '未知標籤' };
-              } else {
-                return { name: '未知標籤' };
-              }
-            });
-            
-            return character;
-          }).filter(Boolean); // 過濾掉無效的角色
-          
-          setCharacters(processedLocalCharacters);
-          console.log('設置從本地存儲加載的角色列表');
-        }
-      } catch (error) {
-        console.error('加載角色列表失敗:', error);
+        alert('無法從伺服器加載角色數據，請檢查網路連接或重新登入。');
         setCharacters([]);
       } finally {
         setLoading(false);
       }
-    };
-    
-    fetchCharacters();
-    
-    // 添加頁面可見性變化監聽器
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log("角色頁面變為可見，刷新數據");
-        fetchCharacters();
-      }
-    };
-    
-    // 監聽頁面可見性變化
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // 清理函數
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    } catch (error) {
+      console.error('加載角色列表失敗:', error);
+      setCharacters([]);
+    }
+  };
+
+  useEffect(() => {
+    loadCharacters();
   }, [session]);
 
   // 獲取當前用戶資料
@@ -334,100 +207,119 @@ export default function Characters() {
   };
 
   // 加入好友
-  const addToFriends = async (e, characterId) => {
-    e.stopPropagation(); // 阻止點擊事件傳播到卡片
-    
+  const addFriend = async (character) => {
     try {
-      // 使用正確的API添加好友關係
-      const response = await axios.post('/api/user-friends', { characterId });
-      
-      if (response.status === 200 || response.status === 201) {
-        // 修改前端狀態
-        const updatedCharacters = characters.map(character => 
-          character.id === characterId 
-            ? { ...character, isFriend: true } 
-            : character
-        );
-        
-        // 更新頁面狀態
-        setCharacters(updatedCharacters);
-        
-        // 更新用戶存儲
-        if (session) {
-          const userId = getSafeUserId(session);
-          
-          // 更新角色列表中的好友狀態
-          const myCharacters = getUserData(userId, 'myCharacters', []);
-          const updatedMyCharacters = myCharacters.map(char => 
-            char.id === characterId ? { ...char, isFriend: true } : char
-          );
-          setUserData(userId, 'myCharacters', updatedMyCharacters);
-          
-          // 更新好友列表
-          const friendsList = getUserData(userId, 'friendsList', []);
-          const character = characters.find(c => c.id === characterId);
-          if (character && !friendsList.some(f => f.id === characterId)) {
-            const updatedFriendsList = [...friendsList, {
-              ...character,
-              isFriend: true,
-              addedAt: new Date().toISOString(),
-              affinity: 50
-            }];
-            setUserData(userId, 'friendsList', updatedFriendsList);
-          }
-          
-          console.log('更新用戶存儲的角色列表和好友列表 - 加入好友');
-        }
-        
-        alert("已加入好友!");
+      if (!session) {
+        alert('請先登入');
+        return;
       }
+      
+      const userId = getSafeUserId(session);
+      
+      // 添加到我的好友
+      await axios.post('/api/user-friends', {
+        characterId: character.id
+      });
+      
+      // 更新公開角色列表，標記已添加的角色
+      setCharacters(prevCharacters => 
+        prevCharacters.map(c => 
+          c.id === character.id 
+            ? { ...c, isFriend: true } 
+            : c
+        )
+      );
+      
+      console.log(`已將 ${character.name} 添加為好友`);
     } catch (error) {
-      console.error("加入好友失敗:", error);
-      alert("加入好友失敗，請稍後再試");
+      console.error('添加好友失敗:', error);
+      alert('添加好友失敗，請重試');
     }
   };
 
   // 移除好友
-  const removeFromFriends = async (e, characterId) => {
-    e.stopPropagation(); // 阻止點擊事件傳播到卡片
-    
+  const removeFriend = async (character) => {
     try {
-      // 使用正確的API刪除好友關係
-      await axios.delete(`/api/user-friends?characterId=${characterId}`);
-      
-      // 修改前端狀態
-      const updatedCharacters = characters.map(character => 
-        character.id === characterId 
-          ? { ...character, isFriend: false } 
-          : character
-      );
-      
-      // 更新頁面狀態
-      setCharacters(updatedCharacters);
-      
-      // 更新用戶存儲
-      if (session) {
-        const userId = getSafeUserId(session);
-        
-        // 更新角色列表中的好友狀態
-        const myCharacters = getUserData(userId, 'myCharacters', []);
-        const updatedMyCharacters = myCharacters.map(char => 
-          char.id === characterId ? { ...char, isFriend: false } : char
-        );
-        setUserData(userId, 'myCharacters', updatedMyCharacters);
-        
-        // 更新好友列表
-        const friendsList = getUserData(userId, 'friendsList', []);
-        const updatedFriendsList = friendsList.filter(friend => friend.id !== characterId);
-        setUserData(userId, 'friendsList', updatedFriendsList);
-        
-        console.log('更新用戶存儲的角色列表和好友列表 - 移除好友');
+      if (!session) {
+        alert('請先登入');
+        return;
       }
       
-      alert("已從好友中移除!");
+      const userId = getSafeUserId(session);
+      
+      // 從API移除好友 - 修正 URL 格式
+      await axios.delete(`/api/user-friends?characterId=${character.id}`);
+      
+      // 更新公開角色列表，移除標記
+      setCharacters(prevCharacters => 
+        prevCharacters.map(c => 
+          c.id === character.id 
+            ? { ...c, isFriend: false } 
+            : c
+        )
+      );
+      
+      console.log(`已將 ${character.name} 從好友中移除`);
     } catch (error) {
-      console.error("移除好友失敗:", error);
-      alert("移除好友失敗，請稍後再試");
+      console.error('移除好友失敗:', error);
+      alert('移除好友失敗，請重試');
+    }
+  };
+
+  // 更新角色的公開/私有狀態
+  const togglePublic = async (character) => {
+    try {
+      if (!session) {
+        alert('請先登入');
+        return;
+      }
+      
+      // 調用API更新角色的公開狀態
+      await axios.put(`/api/characters/${character.id}`, {
+        isPublic: !character.isPublic
+      });
+      
+      // 更新本地角色列表
+      setCharacters(prev => 
+        prev.map(c => 
+          c.id === character.id 
+            ? { ...c, isPublic: !c.isPublic } 
+            : c
+        )
+      );
+      
+      console.log(`已更新角色 ${character.name} 的公開狀態為: ${!character.isPublic ? '公開' : '私有'}`);
+    } catch (error) {
+      console.error('更新角色公開狀態失敗:', error);
+      alert('更新失敗，請重試');
+    }
+  };
+
+  // 刪除角色
+  const deleteCharacter = async (character) => {
+    try {
+      if (!session) {
+        alert('請先登入');
+        return;
+      }
+      
+      // 確認刪除
+      if (!window.confirm(`確定要刪除 ${character.name} 嗎？此操作不可撤銷，相關聊天記錄會保留但將無法繼續對話。`)) {
+        return;
+      }
+      
+      const userId = getSafeUserId(session);
+      
+      // 從API刪除角色
+      await axios.delete(`/api/characters/${character.id}`);
+      
+      // 更新角色列表
+      setCharacters(prev => prev.filter(c => c.id !== character.id));
+      
+      console.log(`已刪除角色: ${character.name}`);
+    } catch (error) {
+      console.error('刪除角色失敗:', error);
+      alert('刪除角色失敗，請重試');
     }
   };
 
@@ -627,14 +519,20 @@ export default function Characters() {
                     <div className="flex space-x-2">
                       {character.isFriend ? (
                         <button
-                          onClick={(e) => removeFromFriends(e, character.id)}
+                          onClick={(e) => {
+                            e.stopPropagation(); // 阻止事件冒泡
+                            removeFriend(character);
+                          }}
                           className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-md text-sm transition"
                         >
                           移除好友
                         </button>
                       ) : (
                         <button
-                          onClick={(e) => addToFriends(e, character.id)}
+                          onClick={(e) => {
+                            e.stopPropagation(); // 阻止事件冒泡
+                            addFriend(character);
+                          }}
                           className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded-md text-sm transition"
                         >
                           加為好友

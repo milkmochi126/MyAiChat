@@ -19,13 +19,13 @@ export default function Welcome() {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">歡迎使用 AI 聊天應用</h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300">
+          <p className="text-xl text-gray-500 dark:text-gray-300">
             與您創建的角色進行有趣的對話，探索 AI 聊天的無限可能
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <div className="bg-gray-800 dark:bg-gray-800 rounded-lg shadow-md p-6">
             <h2 className="text-2xl font-semibold mb-4">開始聊天</h2>
             <p className="mb-4">查看您的聊天列表，繼續之前的對話或開始新的聊天。</p>
             <Link href="/" className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">
@@ -33,7 +33,7 @@ export default function Welcome() {
             </Link>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <div className="bg-gray-800 dark:bg-gray-800 rounded-lg shadow-md p-6">
             <h2 className="text-2xl font-semibold mb-4">管理角色</h2>
             <p className="mb-4">創建新角色，編輯現有角色，或瀏覽公開角色庫。</p>
             <Link href="/characters" className="inline-block bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded">
@@ -43,7 +43,7 @@ export default function Welcome() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <div className="bg-gray-800 dark:bg-gray-800 rounded-lg shadow-md p-6">
             <h2 className="text-2xl font-semibold mb-4">好友列表</h2>
             <p className="mb-4">查看您添加的好友角色，快速開始對話。</p>
             <Link href="/friends" className="inline-block bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded">
@@ -51,7 +51,7 @@ export default function Welcome() {
             </Link>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <div className="bg-gray-800 dark:bg-gray-800 rounded-lg shadow-md p-6">
             <h2 className="text-2xl font-semibold mb-4">個人設置</h2>
             <p className="mb-4">管理您的個人資料、API 金鑰和應用設置。</p>
             <Link href="/settings" className="inline-block bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-2 px-4 rounded">

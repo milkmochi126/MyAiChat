@@ -3,24 +3,27 @@ import { SessionProvider, useSession } from "next-auth/react";
 import Layout from "../components/Layout";
 import { useRouter } from "next/router";
 import { useEffect } from "react";
-import { getSafeUserId, initializeNewUser } from "../utils/userStorage";
+import { getSafeUserId } from "../utils/userStorage";
 import { Toaster } from 'react-hot-toast';
+import axios from "axios";
 
-// 用戶初始化組件
+// 用戶初始化組件 - 為新用戶創建初始資料
 function UserInitializer() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   
   useEffect(() => {
     // 當會話狀態變化時檢查用戶初始化
     if (status === 'authenticated' && session) {
-      console.log('用戶已登錄，檢查初始化狀態');
+      console.log('用戶已登錄');
       
       // 獲取安全的用戶 ID
       const userId = getSafeUserId(session);
       
-      // 初始化新用戶數據
-      initializeNewUser(userId, session);
+      if (userId) {
+        // 調用後端API進行初始化 (如果需要)
+        // 這裡不再使用本地儲存
+        console.log('用戶ID:', userId);
+      }
     } else if (status === 'unauthenticated') {
       console.log('用戶未登錄');
     }

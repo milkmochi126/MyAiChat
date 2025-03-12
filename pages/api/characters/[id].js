@@ -2,17 +2,31 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
 import prisma from "../../../lib/prisma";
 
+// 從環境變量中獲取API密鑰
+const BACKEND_API_KEY = process.env.BACKEND_API_KEY || "";
+
 export default async function handler(req, res) {
   console.log("API: 單個角色請求開始處理");
   
   try {
-    const session = await getServerSession(req, res, authOptions);
-    if (!session) {
-      console.log("API: 未授權訪問，沒有有效會話");
-      return res.status(401).json({ error: "未授權" });
-    }
+    // 檢查是否使用API密鑰訪問
+    const apiKey = req.query.api_key || "";
+    const isValidApiKey = BACKEND_API_KEY && apiKey === BACKEND_API_KEY;
     
-    console.log(`API: 已授權用戶 ID: ${session.user.id}, 名稱: ${session.user.name}`);
+    // 外層定義session變數，默認為null
+    let session = null;
+    
+    if (isValidApiKey) {
+      console.log("API: 使用API密鑰授權訪問");
+    } else {
+      // 如果沒有有效的API密鑰，則需要有效的會話
+      session = await getServerSession(req, res, authOptions);
+      if (!session) {
+        console.log("API: 未授權訪問，沒有有效會話或API密鑰");
+        return res.status(401).json({ error: "未授權" });
+      }
+      console.log(`API: 已授權用戶 ID: ${session.user.id}, 名稱: ${session.user.name}`);
+    }
 
     // 獲取角色ID
     const { id } = req.query;
@@ -50,9 +64,9 @@ export default async function handler(req, res) {
             return res.status(404).json({ error: "角色不存在" });
           }
           
-          // 檢查權限 - 只有創建者或公開角色可以被查看
-          if (character.creatorId !== session.user.id && !character.isPublic) {
-            return res.status(403).json({ error: "無權查看此角色" });
+          // 如果使用API密鑰，或者角色是公開的，或者由當前用戶創建，則允許訪問
+          if (!isValidApiKey && character.creatorId !== (session?.user?.id) && !character.isPublic) {
+            return res.status(403).json({ error: "沒有訪問權限" });
           }
           
           console.log(`API: 找到角色: ${character.name}`);
@@ -145,12 +159,44 @@ export default async function handler(req, res) {
             return res.status(403).json({ error: "無權更新此角色的公開狀態" });
           }
           
+          // 打印收到的數據，特別關注年齡欄位
+          console.log("API: 收到的角色更新數據:", req.body);
+          console.log(`API: 年齡欄位檢查 - 原始值: ${character.age}, 新值: ${req.body.age}, 類型: ${typeof req.body.age}`);
+          
           // 構建更新數據
           const updateData = {};
           
           // 更新公開狀態
           if (req.body.isPublic !== undefined) {
             updateData.isPublic = req.body.isPublic;
+          }
+          
+          // 更新基本信息欄位
+          ['name', 'description', 'job', 'gender', 'avatar', 'system'].forEach(field => {
+            if (req.body[field] !== undefined) {
+              updateData[field] = req.body[field];
+            }
+          });
+          
+          // 更新新增欄位
+          ['quote', 'basicInfo', 'personality', 'speakingStyle', 'likes', 
+           'dislikes', 'firstChatScene', 'firstChatLine', 'extraInfo'].forEach(field => {
+            if (req.body[field] !== undefined) {
+              // 使用空字符串代替null，與description處理方式一致
+              updateData[field] = req.body[field] || "";
+              
+              // extraInfo特殊處理為空數組
+              if (field === 'extraInfo' && !req.body[field]) {
+                updateData[field] = [];
+              }
+            }
+          });
+          
+          // 特殊處理年齡欄位
+          if (req.body.age !== undefined) {
+            console.log(`API: 準備更新年齡欄位，值為: ${req.body.age}`);
+            // 確保年齡以合適的格式保存，如果是空字符串，轉換為null
+            updateData.age = req.body.age === "" ? null : req.body.age;
           }
           
           // 更新好友狀態 - 這個不存儲在數據庫中，而是存儲在用戶的本地存儲中
@@ -218,6 +264,14 @@ export default async function handler(req, res) {
               });
               
               console.log(`API: 角色更新成功，ID: ${id}`);
+              console.log(`API: 更新後的年齡欄位: ${updatedCharacter.age}, 類型: ${typeof updatedCharacter.age}`);
+              
+              // 檢查年齡欄位是否正確保存
+              if (req.body.age !== undefined && updatedCharacter.age !== req.body.age && 
+                  !(req.body.age === "" && updatedCharacter.age === null)) {
+                console.warn(`API警告: 年齡欄位可能未正確保存! 請求值: ${req.body.age}, 保存後值: ${updatedCharacter.age}`);
+              }
+              
               return res.status(200).json({
                 ...updatedCharacter,
                 isFriend: friendStatus
@@ -269,6 +323,14 @@ export default async function handler(req, res) {
             });
             
             console.log(`API: 角色更新成功，ID: ${id}`);
+            console.log(`API: 更新後的年齡欄位: ${updatedCharacter.age}, 類型: ${typeof updatedCharacter.age}`);
+            
+            // 檢查年齡欄位是否正確保存
+            if (req.body.age !== undefined && updatedCharacter.age !== req.body.age && 
+                !(req.body.age === "" && updatedCharacter.age === null)) {
+              console.warn(`API警告: 年齡欄位可能未正確保存! 請求值: ${req.body.age}, 保存後值: ${updatedCharacter.age}`);
+            }
+            
             return res.status(200).json(updatedCharacter);
           } else {
             // 如果只是更新好友狀態，則直接返回成功

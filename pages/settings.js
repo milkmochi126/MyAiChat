@@ -5,6 +5,7 @@ import Link from "next/link";
 import AvatarEditor from "react-avatar-editor";
 import { getSafeUserId, getUserData, setUserData } from "../utils/userStorage";
 import axios from "axios";
+import toast from "react-hot-toast";
 
 export default function Settings() {
   const { data: session } = useSession();
@@ -25,6 +26,11 @@ export default function Settings() {
   });
   const [myCharacters, setMyCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
+  // 添加角色編輯加載狀態
+  const [loadingCharacter, setLoadingCharacter] = useState(false);
+  
+  // 防抖處理，避免頻繁保存
+  const saveTimeout = useRef(null);
   
   // 新增角色表單
   const [newCharacter, setNewCharacter] = useState({
@@ -59,50 +65,7 @@ export default function Settings() {
   const avatarEditorRef = useRef(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 載入用戶資料
-  useEffect(() => {
-    if (session) {
-      const userId = getSafeUserId(session);
-      const storedProfile = getUserData(userId, 'userProfile', null);
-      
-      if (storedProfile) {
-        // 使用存儲的個人資料
-        setMyProfile(storedProfile);
-      } else {
-        // 如果沒有存儲的個人資料，則使用會話中的資料
-        const defaultProfile = {
-          name: session.user.name || '',
-          email: session.user.email || '',
-          avatar: session.user.image || '',
-          apiKeys: {
-            gpt: "",
-            claude: "",
-            gemini: ""
-          },
-          defaultModel: "gemini"
-        };
-        
-        // 確保頭像 URL 是有效的
-        if (defaultProfile.avatar) {
-          console.log('初始化用戶頭像:', defaultProfile.avatar);
-        }
-        
-        setMyProfile(defaultProfile);
-        
-        // 保存到本地存儲
-        setUserData(userId, 'userProfile', defaultProfile);
-      }
-      
-      // 載入暫存的角色
-      const tempCharacter = getUserData(userId, 'tempCharacter', null);
-      if (tempCharacter) {
-        setNewCharacter(tempCharacter);
-        setHasTempSave(true);
-      }
-    }
-  }, [session]);
-
-  // 定義獲取我的角色的函數
+  // 定義獲取我的角色的函數 - 將該函數移到這裡，在所有useEffect之前
   const fetchMyCharacters = useCallback(async () => {
     if (!session?.user?.id || window.isLoggingOut) return;
     
@@ -167,6 +130,186 @@ export default function Settings() {
     }
   }, [session]);
 
+  // 添加單獨處理角色數據載入的函數
+  const loadCharacterData = useCallback(async (characterId) => {
+    if (!characterId) return;
+    
+    console.log('載入角色數據，ID:', characterId);
+    setLoadingCharacter(true);
+    
+    try {
+      // 直接從API獲取最新的角色詳細信息
+      console.log(`從API獲取角色(${characterId})數據...`);
+      const response = await axios.get(`/api/characters/${characterId}`);
+      console.log('API回應數據:', response.data);
+      console.log('API回應中的年齡值:', response.data.age, '類型:', typeof response.data.age);
+      
+      // 準備表單數據
+      const characterData = response.data;
+      
+      // 基本欄位 (確保至少包含這些欄位)
+      const formData = {
+        id: characterData.id,
+        name: characterData.name || "",
+        age: characterData.age || "",  // 特別關注年齡欄位
+        job: characterData.job || "",
+        gender: characterData.gender || "男性",
+        description: characterData.description || "", 
+        isPublic: Boolean(characterData.isPublic),
+        avatar: characterData.avatar || "",
+        // 新增所有必要欄位的處理
+        quote: characterData.quote || "",
+        basicInfo: characterData.basicInfo || "",
+        personality: characterData.personality || "",
+        speakingStyle: characterData.speakingStyle || "",
+        likes: characterData.likes || "",
+        dislikes: characterData.dislikes || "",
+        firstChatScene: characterData.firstChatScene || "",
+        firstChatLine: characterData.firstChatLine || "",
+        tags: [],
+        extraInfo: []
+      };
+      
+      // 處理標籤
+      if (characterData.tags && Array.isArray(characterData.tags)) {
+        formData.tags = characterData.tags.map(tag => 
+          typeof tag === 'string' ? tag : (tag && tag.name ? tag.name : '')
+        ).filter(tag => tag);
+      }
+      
+      // 處理extraInfo (可能包含其他詳細欄位)
+      if (characterData.extraInfo) {
+        try {
+          if (typeof characterData.extraInfo === 'string') {
+            formData.extraInfo = JSON.parse(characterData.extraInfo);
+          } else if (Array.isArray(characterData.extraInfo)) {
+            formData.extraInfo = characterData.extraInfo;
+          } else if (typeof characterData.extraInfo === 'object') {
+            formData.extraInfo = Object.entries(characterData.extraInfo).map(([title, content]) => ({
+              title,
+              content: typeof content === 'string' ? content : JSON.stringify(content)
+            }));
+          }
+        } catch (error) {
+          console.error('處理extraInfo時出錯:', error);
+          formData.extraInfo = [];
+        }
+      }
+      
+      console.log('設置表單數據:', formData);
+      console.log('包含所有欄位的詳細資訊:', JSON.stringify({
+        quote: formData.quote,
+        basicInfo: formData.basicInfo,
+        personality: formData.personality,
+        speakingStyle: formData.speakingStyle,
+        likes: formData.likes,
+        dislikes: formData.dislikes,
+        firstChatScene: formData.firstChatScene,
+        firstChatLine: formData.firstChatLine
+      }, null, 2));
+      
+      // 設置表單數據
+      setNewCharacter(formData);
+      
+      // 設置頭像預覽
+      if (characterData.avatar) {
+        setAvatarPreview(characterData.avatar);
+      }
+      
+      setLoadingCharacter(false);
+      console.log('角色資料載入完成');
+      return formData;
+    } catch (error) {
+      console.error('獲取角色數據失敗:', error);
+      setLoadingCharacter(false);
+      alert('無法載入角色資料，請稍後再試');
+      return null;
+    }
+  }, []);
+
+  // 載入用戶資料
+  useEffect(() => {
+    if (session) {
+      const userId = getSafeUserId(session);
+      const storedProfile = getUserData(userId, 'userProfile', null);
+      
+      if (storedProfile) {
+        // 使用存儲的個人資料
+        setMyProfile(storedProfile);
+      } else {
+        // 如果沒有存儲的個人資料，則使用會話中的資料
+        const defaultProfile = {
+          name: session.user.name || '',
+          email: session.user.email || '',
+          avatar: session.user.image || '',
+          apiKeys: {
+            gpt: "",
+            claude: "",
+            gemini: ""
+          },
+          defaultModel: "gemini"
+        };
+        
+        // 確保頭像 URL 是有效的
+        if (defaultProfile.avatar) {
+          console.log('初始化用戶頭像:', defaultProfile.avatar);
+        }
+        
+        setMyProfile(defaultProfile);
+        
+        // 保存到本地存儲
+        setUserData(userId, 'userProfile', defaultProfile);
+      }
+      
+      // 載入暫存的角色
+      const tempCharacter = getUserData(userId, 'tempCharacter', null);
+      if (tempCharacter) {
+        setNewCharacter(tempCharacter);
+        setHasTempSave(true);
+      }
+    }
+  }, [session]);
+
+  // 根據 URL 參數設置 activeTab
+  useEffect(() => {
+    if (tab) {
+      console.log('URL變更，tab參數為:', tab);
+      setActiveTab(tab);
+      
+      // 如果切換到我的角色標籤時，重新加載角色列表
+      if (tab === "myCharacters" && session?.user?.id) {
+        console.log('切換到我的角色標籤，加載角色列表');
+        fetchMyCharacters();
+      }
+      
+      // 如果切換到編輯角色標籤，且有角色ID，加載角色數據
+      if (tab === "editCharacter" && router.query.id && session?.user?.id) {
+        console.log('URL切換到編輯角色標籤，角色ID:', router.query.id);
+        // 重置表單狀態，避免顯示舊數據
+        setNewCharacter({
+          name: "",
+          age: "",
+          job: "",
+          quote: "",
+          description: "",
+          gender: "男性",
+          tags: [],
+          basicInfo: "",
+          personality: "",
+          speakingStyle: "",
+          firstChatScene: "",
+          firstChatLine: "",
+          likes: "",
+          dislikes: "",
+          isPublic: false,
+          extraInfo: []
+        });
+        // 載入最新角色數據
+        loadCharacterData(router.query.id);
+      }
+    }
+  }, [tab, router.query.id, fetchMyCharacters, loadCharacterData, session]);
+
   // 處理個人資料變更
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -183,16 +326,71 @@ export default function Settings() {
     });
   };
 
-  // 處理API金鑰變更
+  // 處理 API 金鑰變更
   const handleApiKeyChange = (e) => {
     const { name, value } = e.target;
-    setMyProfile(prev => ({
-      ...prev,
-      apiKeys: {
-        ...prev.apiKeys,
-        [name]: value
+    setMyProfile(prev => {
+      const updated = {
+        ...prev,
+        apiKeys: {
+          ...prev.apiKeys,
+          [name]: value
+        }
+      };
+      
+      // 保存到本地存儲
+      if (session) {
+        const userId = getSafeUserId(session);
+        setUserData(userId, 'userProfile', updated);
       }
-    }));
+      
+      // 同時保存到數據庫
+      clearTimeout(saveTimeout.current);
+      saveTimeout.current = setTimeout(() => {
+        saveApiKeysToDatabase(updated);
+      }, 1000);
+      
+      return updated;
+    });
+  };
+
+  // 保存 API 金鑰到數據庫
+  const saveApiKeysToDatabase = async (profile) => {
+    if (!session) {
+      console.log("未登入，無法保存設定");
+      return;
+    }
+    
+    try {
+      // 確保 profile 和 apiKeys 存在且有效
+      if (!profile || !profile.apiKeys) {
+        console.error("缺少有效的配置檔案或 API 金鑰");
+        toast.error('保存 API 金鑰失敗：無效的數據');
+        return;
+      }
+      
+      // 確保 apiKeys 是一個有效的對象而不是 null 或其他類型
+      const apiKeys = profile.apiKeys || { gpt: "", claude: "", gemini: "" };
+      const defaultModel = profile.defaultModel || "gemini";
+      
+      const response = await axios.post('/api/user/update-profile', {
+        apiKeys,
+        defaultModel
+      });
+      
+      if (response.data.success) {
+        // 成功保存，但不顯示通知以避免干擾用戶
+        console.log('API 金鑰保存成功');
+      } else {
+        throw new Error(response.data.error || '未知錯誤');
+      }
+    } catch (error) {
+      console.error('保存 API 金鑰失敗:', error);
+      // 只在遇到真正錯誤時顯示提示
+      if (error.response?.status >= 400) {
+        toast.error(`保存 API 金鑰失敗: ${error.response?.data?.error || error.message}`);
+      }
+    }
   };
 
   // 處理默認模型變更
@@ -206,6 +404,12 @@ export default function Settings() {
         const userId = getSafeUserId(session);
         setUserData(userId, 'userProfile', updated);
       }
+      
+      // 同時保存到數據庫
+      clearTimeout(saveTimeout.current);
+      saveTimeout.current = setTimeout(() => {
+        saveApiKeysToDatabase(updated);
+      }, 500);
       
       return updated;
     });
@@ -392,6 +596,22 @@ export default function Settings() {
   // 處理新增角色表單變更
   const handleNewCharacterChange = (e) => {
     const { name, value, type, checked } = e.target;
+    
+    // 特殊處理年齡欄位，確保它以正確的格式存儲
+    if (name === 'age') {
+      console.log(`表單變更 - 年齡欄位: "${value}", 類型: ${typeof value}`);
+      
+      // 如果輸入非空，則保留原始值；如果為空，則設為空字符串
+      const processedValue = value.trim() === '' ? '' : value;
+      
+      setNewCharacter(prev => ({
+        ...prev,
+        [name]: processedValue
+      }));
+      return;
+    }
+    
+    // 處理其他欄位
     setNewCharacter(prev => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value
@@ -428,15 +648,26 @@ export default function Settings() {
 
   // 處理標籤變更
   const handleTagChange = (tag) => {
-    const newTags = [...newCharacter.tags];
-    if (newTags.includes(tag)) {
-      // 移除標籤
-      const index = newTags.indexOf(tag);
-      newTags.splice(index, 1);
+    // 確保newCharacter.tags是數組
+    const currentTags = Array.isArray(newCharacter.tags) ? [...newCharacter.tags] : [];
+    
+    // 檢查標籤是否已存在
+    const tagExists = currentTags.some(t => 
+      typeof t === 'string' ? t === tag : (t && t.name === tag)
+    );
+    
+    let newTags;
+    if (tagExists) {
+      // 移除標籤 - 不管是字符串還是對象格式
+      newTags = currentTags.filter(t => 
+        typeof t === 'string' ? t !== tag : (t && t.name !== tag)
+      );
     } else {
-      // 添加標籤
-      newTags.push(tag);
+      // 添加標籤 - 使用字符串格式保持一致
+      newTags = [...currentTags, tag];
     }
+    
+    console.log('標籤已更新:', newTags);
     setNewCharacter({...newCharacter, tags: newTags});
   };
 
@@ -518,91 +749,112 @@ export default function Settings() {
 
   // 處理新增角色提交
   const handleNewCharacterSubmit = async (e) => {
-    e.preventDefault();
+    e.preventDefault(); // 阻止表單預設提交行為
     
     try {
-      if (!session) {
-        alert("請先登入！");
+      if (!session?.user?.id) {
+        alert("請先登入再操作！");
         return;
       }
       
-      // 獲取用戶ID
-      const userId = getSafeUserId(session);
-      
-      // 檢查是否為編輯現有角色
-      const isEditing = activeTab === "editCharacter" && router.query.id;
-      
-      // 準備角色數據，包括頭像
-      const characterData = {
-        ...newCharacter
-      };
-      
-      // 如果有頭像數據，確保它被正確處理
-      if (characterData.avatar && characterData.avatar.startsWith('data:image')) {
-        // 數據URL的頭像已經是正確格式，不需要額外處理
-        console.log("頭像以數據URL格式保存");
-      }
-      
-      if (isEditing) {
+      if (router.query.id) {
         // 編輯現有角色
-        const characterId = router.query.id;
+        console.log(`嘗試更新角色 ID: ${router.query.id}`, newCharacter);
+        console.log(`年齡欄位檢查: ${newCharacter.age}, 類型: ${typeof newCharacter.age}`);
         
-        try {
-          // 嘗試從API更新角色
-          console.log('嘗試從API更新角色:', characterId);
-          await axios.patch(`/api/characters/${characterId}`, characterData);
-          console.log('角色已從API更新');
-          
-          // 重新獲取角色列表
-          await fetchMyCharacters();
-          
-          alert("角色已更新!");
-        } catch (apiError) {
-          console.error('API更新角色失敗:', apiError);
-          
-          // 即使API失敗，也更新本地存儲
-          const updatedCharacters = myCharacters.map(char => {
-            if (char.id === characterId) {
-              return {
-                ...char,
-                ...characterData,
-                updatedAt: new Date().toISOString()
-              };
-            }
-            return char;
-          });
-          
-          setMyCharacters(updatedCharacters);
-          
-          // 保存到本地存儲
-          setUserData(userId, 'myCharacters', updatedCharacters);
-          console.log('更新本地存儲的角色列表');
-          
-          alert("角色已更新! (僅本地存儲)");
+        // 準備要發送到API的數據
+        const characterData = {
+          ...newCharacter,
+          userId: session.user.id,
+        };
+        
+        // 特別處理年齡欄位 - 如果是空字符串，設置為null
+        if (characterData.age === "") {
+          characterData.age = null;
         }
+        
+        console.log('準備提交至API的資料:', characterData);
+        
+        // 發送PATCH請求更新角色
+        const result = await axios.patch(`/api/characters/${router.query.id}`, characterData);
+        console.log('API更新回應:', result.data);
+        
+        // 檢查年齡欄位是否已正確更新
+        if (newCharacter.age !== undefined && 
+            result.data.age !== newCharacter.age && 
+            !(newCharacter.age === "" && result.data.age === null)) {
+          console.warn('警告: API回應中的年齡與提交的年齡不符', {
+            submitted: newCharacter.age,
+            returned: result.data.age
+          });
+        }
+        
+        // 重新獲取角色列表
+        await fetchMyCharacters();
+        
+        // 提示用戶更新成功
+        alert("角色已更新!");
+        
+        // 返回到角色列表頁面
+        router.push('/settings?tab=myCharacters');
       } else {
         // 創建新角色
         try {
           // 嘗試從API創建角色
           console.log('嘗試從API創建角色');
+          console.log('提交數據詳情:', JSON.stringify(newCharacter, null, 2));
+          
+          // 檢查所有欄位是否正確設置
+          const fieldsToCheck = ['name', 'age', 'job', 'quote', 'description', 'gender', 'tags', 
+                              'basicInfo', 'personality', 'speakingStyle', 'firstChatScene', 
+                              'firstChatLine', 'likes', 'dislikes', 'extraInfo'];
+          
+          fieldsToCheck.forEach(field => {
+            console.log(`欄位 ${field} 的值:`, newCharacter[field]);
+          });
+          
+          // 處理欄位，確保與簡介(description)處理方式相同
+          const characterData = {
+            ...newCharacter,
+            quote: newCharacter.quote || "",
+            basicInfo: newCharacter.basicInfo || "",
+            personality: newCharacter.personality || "",
+            speakingStyle: newCharacter.speakingStyle || "",
+            likes: newCharacter.likes || "",
+            dislikes: newCharacter.dislikes || "",
+            firstChatScene: newCharacter.firstChatScene || "",
+            firstChatLine: newCharacter.firstChatLine || ""
+          };
+          
+          // 特別處理年齡欄位
+          if (characterData.age === "") {
+            characterData.age = null;
+          }
+          
+          console.log('處理後準備提交的數據:', JSON.stringify(characterData, null, 2));
+          
           const response = await axios.post('/api/characters', characterData);
           const createdCharacter = response.data;
           console.log('角色已從API創建:', createdCharacter.id);
+          console.log('API返回的完整數據:', JSON.stringify(createdCharacter, null, 2));
           
           // 重新獲取角色列表
           await fetchMyCharacters();
           
           // 清除暫存資料
-          setUserData(userId, 'tempCharacter', null);
+          setUserData(session.user.id, 'tempCharacter', null);
           setHasTempSave(false);
           
           alert("角色已創建!");
+          
+          // 返回到角色列表頁面
+          router.push('/settings?tab=myCharacters');
         } catch (apiError) {
           console.error('API創建角色失敗:', apiError);
           
           // 即使API失敗，也更新本地存儲
           const newCharacterData = {
-            ...characterData,
+            ...newCharacter,
             id: "local_" + Date.now(), // 使用時間戳作為ID
             creator: session?.user?.name || "我",
             createdAt: new Date().toISOString(),
@@ -613,43 +865,19 @@ export default function Settings() {
           setMyCharacters(updatedCharacters);
           
           // 保存到本地存儲
-          setUserData(userId, 'myCharacters', updatedCharacters);
+          setUserData(session.user.id, 'myCharacters', updatedCharacters);
           console.log('更新本地存儲的角色列表');
           
           // 清除暫存資料
-          setUserData(userId, 'tempCharacter', null);
+          setUserData(session.user.id, 'tempCharacter', null);
           setHasTempSave(false);
           
           alert("角色已創建! (僅本地存儲)");
         }
       }
-      
-      // 重置表單和頭像預覽
-      setAvatarPreview("");
-      setNewCharacter({
-        name: "",
-        age: "",
-        job: "",
-        quote: "",
-        description: "",
-        gender: "男性",
-        tags: [],
-        basicInfo: "",
-        personality: "",
-        speakingStyle: "",
-        firstChatScene: "",
-        firstChatLine: "",
-        likes: "",
-        dislikes: "",
-        isPublic: false,
-        extraInfo: []
-      });
-      
-      // 返回到我的角色頁面
-      router.push('/settings?tab=myCharacters');
     } catch (error) {
       console.error("創建/更新角色失敗:", error);
-      alert("操作失敗，請稍後再試");
+      alert(`操作失敗: ${error.response?.data?.error || error.message}`);
     }
   };
 
@@ -1233,21 +1461,74 @@ export default function Settings() {
         {activeTab === "editCharacter" ? "編輯角色" : "創建新角色"}
       </h2>
       
-      {activeTab === "newCharacter" && hasTempSave && (
-        <div className="mb-4 p-3 bg-blue-900 bg-opacity-50 rounded-lg">
-          <p className="text-blue-300 mb-2">發現暫存的角色資料！</p>
-          <div className="flex space-x-2">
-            <button 
-              onClick={clearTempSave}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md transition text-sm"
-            >
-              清除暫存並重新開始
-            </button>
+      {/* 調試信息 */}
+      {process.env.NODE_ENV !== "production" && (
+        <div className="mb-4 p-3 bg-gray-900 rounded-lg text-xs overflow-auto max-h-80">
+          <p>當前標籤: {activeTab}</p>
+          <p>角色ID: {router.query.id || "無"}</p>
+          <p>載入狀態: {loadingCharacter ? "加載中" : "已完成"}</p>
+          <p>表單數據摘要: {newCharacter.name ? `${newCharacter.name} (${newCharacter.job})` : "無數據"}</p>
+          
+          <div className="mt-2 pt-2 border-t border-gray-700">
+            <p className="font-bold">詳細表單數據:</p>
+            <p>姓名: {newCharacter.name || "未設置"}</p>
+            <p>職業: {newCharacter.job || "未設置"}</p>
+            <p>年齡: {newCharacter.age || "未設置"}</p>
+            <p>性別: {newCharacter.gender || "未設置"}</p>
+            <p>格言: {newCharacter.quote || "未設置"}</p>
+            <p>標籤: {newCharacter.tags && newCharacter.tags.length > 0 ? 
+              (Array.isArray(newCharacter.tags) ? 
+                newCharacter.tags.map(tag => typeof tag === 'string' ? tag : (tag.name || 'unknown')).join(", ") 
+                : "標籤格式錯誤") 
+              : "無標籤"}</p>
+            <p>基本資料: {newCharacter.basicInfo ? "已設置" : "未設置"}</p>
+            <p>性格特點: {newCharacter.personality ? "已設置" : "未設置"}</p>
+            <p>說話方式: {newCharacter.speakingStyle ? "已設置" : "未設置"}</p>
+            <p>首次對話場景: {newCharacter.firstChatScene ? "已設置" : "未設置"}</p>
+            <p>首次對話台詞: {newCharacter.firstChatLine ? "已設置" : "未設置"}</p>
+            <p>喜好: {newCharacter.likes ? "已設置" : "未設置"}</p>
+            <p>討厭: {newCharacter.dislikes ? "已設置" : "未設置"}</p>
           </div>
+          
+          {/* API 資料重新載入按鈕 */}
+          {activeTab === "editCharacter" && router.query.id && (
+            <div className="mt-3 pt-2 border-t border-gray-700">
+              <button
+                type="button"
+                onClick={() => loadCharacterData(router.query.id)}
+                className="px-3 py-1 bg-blue-700 hover:bg-blue-800 rounded text-xs"
+                disabled={loadingCharacter}
+              >
+                {loadingCharacter ? "載入中..." : "重新載入角色資料"}
+              </button>
+              <p className="mt-1 text-gray-400">如果資料看起來不完整，請點擊按鈕重新從API載入</p>
+            </div>
+          )}
         </div>
       )}
       
-      <form onSubmit={handleNewCharacterSubmit} className="space-y-6">
+      {/* 可見的重新載入按鈕 - 生產環境也顯示 */}
+      {activeTab === "editCharacter" && router.query.id && (
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => loadCharacterData(router.query.id)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition flex items-center"
+            disabled={loadingCharacter}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+            </svg>
+            {loadingCharacter ? "載入中..." : "重新載入角色資料"}
+          </button>
+          <p className="mt-1 text-sm text-gray-400">如果編輯表單中資料不完整，請點擊此按鈕</p>
+        </div>
+      )}
+      
+      <form
+        onSubmit={handleNewCharacterSubmit}
+        className="space-y-5"
+      >
         {/* 頭像上傳區域 */}
         <div className="mb-6">
           <label className="block text-gray-400 mb-2">角色頭像</label>
@@ -1313,7 +1594,7 @@ export default function Settings() {
             <input 
               type="text" 
               name="age" 
-              value={newCharacter.age} 
+              value={newCharacter.age || ""} 
               onChange={handleNewCharacterChange} 
               className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
               placeholder="輸入角色年齡"
@@ -1359,7 +1640,9 @@ export default function Settings() {
                 type="button"
                 onClick={() => handleTagChange(tag)}
                 className={`px-3 py-2 rounded-md text-sm ${
-                  newCharacter.tags.includes(tag) 
+                  Array.isArray(newCharacter.tags) && newCharacter.tags.some(t => 
+                    typeof t === 'string' ? t === tag : (t && t.name === tag)
+                  )
                     ? "bg-blue-600 text-white" 
                     : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                 }`}
@@ -1368,7 +1651,7 @@ export default function Settings() {
               </button>
             ))}
           </div>
-          {newCharacter.tags.length === 0 && (
+          {(!newCharacter.tags || newCharacter.tags.length === 0) && (
             <p className="text-xs text-gray-500 mt-1">請至少選擇一個標籤</p>
           )}
         </div>
@@ -1547,6 +1830,16 @@ export default function Settings() {
         </div>
         
         <div className="flex justify-end space-x-3">
+          {activeTab === "editCharacter" && (
+            <button
+              type="button" 
+              onClick={() => router.push('/settings?tab=myCharacters')}
+              className="px-6 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition"
+              disabled={loadingCharacter}
+            >
+              取消編輯
+            </button>
+          )}
           {activeTab === "newCharacter" && (
             <button
               type="button"
@@ -1558,9 +1851,10 @@ export default function Settings() {
           )}
           <button
             type="submit"
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition"
+            className={`px-6 py-2 ${loadingCharacter ? 'bg-blue-800 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} rounded-md transition`}
+            disabled={loadingCharacter}
           >
-            {activeTab === "editCharacter" ? "更新角色" : "創建角色"}
+            {activeTab === "editCharacter" ? (loadingCharacter ? "載入中..." : "更新角色") : "創建角色"}
           </button>
         </div>
       </form>
@@ -1653,27 +1947,13 @@ export default function Settings() {
     </div>
   );
 
-  // 根據 URL 設置活動標籤
+  // 當進入編輯模式時載入角色數據 - 修改為專注於監聽activeTab的變化
   useEffect(() => {
-    if (tab === "myCharacters") {
-      setActiveTab("myCharacters");
-      // 當切換到我的角色標籤時，重新加載角色列表
-      fetchMyCharacters();
-    } else if (tab === "newCharacter") {
-      setActiveTab("newCharacter");
-    } else if (tab === "editCharacter") {
-      setActiveTab("editCharacter");
-    } else {
-      setActiveTab("profile");
+    if (activeTab === "editCharacter" && router.query.id) {
+      console.log('監測到編輯模式狀態變化，ID:', router.query.id);
+      // 已移至URL參數變化的useEffect中處理
     }
-  }, [tab, fetchMyCharacters]);
-
-  // 初始加載角色列表
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchMyCharacters();
-    }
-  }, [fetchMyCharacters, session]);
+  }, [activeTab]);
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-4xl">

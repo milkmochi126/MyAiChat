@@ -1,67 +1,40 @@
-import { useEffect, useState } from "react";
-import { signOut } from "next-auth/react";
-import { useRouter } from "next/router";
-import Head from "next/head";
-import { clearAllUserData } from "../utils/userStorage";
+import { useEffect } from 'react';
+import { useRouter } from 'next/router';
 
-export default function ClearStorage() {
+export default function ClearStoragePage() {
   const router = useRouter();
-  const [message, setMessage] = useState("正在清除本地存儲...");
-  const [countdown, setCountdown] = useState(5);
-
+  
+  // 自動返回首頁
   useEffect(() => {
-    // 清除所有本地存儲
-    try {
-      // 使用我們的工具函數清除所有數據
-      clearAllUserData();
-      
-      setMessage("本地存儲已清除！");
-      
-      // 清除所有 cookie
-      document.cookie.split(";").forEach(function(c) {
-        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-      });
-      
-      // 登出
-      signOut({ redirect: false });
-      
-      // 倒計時後重定向
-      const timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            router.push("/api/auth/signin");
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      
-      return () => clearInterval(timer);
-    } catch (error) {
-      setMessage(`清除失敗: ${error.message}`);
-    }
+    const timer = setTimeout(() => {
+      router.push('/');
+    }, 5000);
+    
+    return () => clearTimeout(timer);
   }, [router]);
-
+  
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
-      <Head>
-        <title>清除存儲 - AI 聊天</title>
-      </Head>
-      
-      <div className="max-w-md w-full p-6 bg-gray-800 rounded-lg shadow-lg text-center">
-        <h1 className="text-2xl font-bold mb-4">清除本地存儲</h1>
-        <p className="mb-4">{message}</p>
-        {countdown > 0 && (
-          <p>
-            {countdown} 秒後將重定向到登入頁面...
+    <div className="container mx-auto px-4 py-16 max-w-md">
+      <div className="bg-white rounded-lg shadow-md p-6 text-center">
+        <h1 className="text-2xl font-bold mb-6">本地存儲已停用</h1>
+        
+        <div className="mb-8">
+          <p className="mb-4 text-gray-700">
+            此應用已經完全改用數據庫模式，所有資料都保存在伺服器上而非瀏覽器本地存儲。
           </p>
-        )}
+          <p className="mb-4 text-gray-700">
+            本地存儲不再被使用，因此無需清除。
+          </p>
+          <p className="text-blue-600">
+            5秒後自動返回首頁...
+          </p>
+        </div>
+        
         <button
-          onClick={() => router.push("/api/auth/signin")}
-          className="mt-6 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md"
+          className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-6 rounded-md transition duration-300"
+          onClick={() => router.push('/')}
         >
-          立即前往登入頁面
+          立即返回首頁
         </button>
       </div>
     </div>
