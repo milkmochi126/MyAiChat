@@ -61,12 +61,14 @@ export default async function handler(req, res) {
               
               // 只有在有角色ID的情況下才清除記憶
               if (chat.characterId) {
-                const memoryResponse = await axios.delete(
-                  `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/memory/${session.user.id}/${chat.characterId}`,
-                  { headers: { 'Content-Type': 'application/json' } }
+                const response = await axios.get(
+                  `${process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/memory/${session.user.id}/${chat.characterId}`,
+                  {
+                    headers: { 'api-key': apiKey }
+                  }
                 );
                 
-                console.log("記憶清除結果:", memoryResponse.data);
+                console.log("記憶清除結果:", response.data);
               }
             } catch (memoryError) {
               console.error("清除記憶時出錯:", memoryError);

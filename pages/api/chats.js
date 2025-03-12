@@ -191,7 +191,7 @@ export default async function handler(req, res) {
               model_type: modelName
             });
             
-            const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/chat`, {
+            const response = await axios.post(`${process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/chat`, {
               api_key: apiKey,
               character_id: targetCharacterId,
               message: message,
