@@ -23,8 +23,10 @@ async function createTablesIfNotExist() {
 
       // 如果表格不存在，手動創建核心表格
       try {
-        // 使用原始 SQL 創建必要的表格
+        // 使用原始 SQL 創建必要的表格，但分開執行每個命令
+        
         // 創建 User 表
+        console.log("開始創建 users 表...");
         await prisma.$executeRaw`
           CREATE TABLE IF NOT EXISTS "users" (
             "id" TEXT NOT NULL,
@@ -36,12 +38,18 @@ async function createTablesIfNotExist() {
             "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updated_at" TIMESTAMP(3) NOT NULL,
             CONSTRAINT "users_pkey" PRIMARY KEY ("id")
-          );
-          CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users"("email");
+          )
         `;
-        console.log("創建 users 表成功");
+        console.log("創建 users 表基本結構成功");
+        
+        // 創建 users 表的索引
+        await prisma.$executeRaw`
+          CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users"("email")
+        `;
+        console.log("創建 users 表索引成功");
 
         // 創建 Account 表
+        console.log("開始創建 accounts 表...");
         await prisma.$executeRaw`
           CREATE TABLE IF NOT EXISTS "accounts" (
             "id" TEXT NOT NULL,
@@ -57,15 +65,26 @@ async function createTablesIfNotExist() {
             "id_token" TEXT,
             "session_state" TEXT,
             CONSTRAINT "accounts_pkey" PRIMARY KEY ("id")
-          );
-          CREATE UNIQUE INDEX IF NOT EXISTS "accounts_provider_provider_account_id_key" 
-            ON "accounts"("provider", "provider_account_id");
-          ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_fkey" 
-            FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          )
         `;
-        console.log("創建 accounts 表成功");
+        console.log("創建 accounts 表基本結構成功");
+        
+        // 創建 accounts 表的索引
+        await prisma.$executeRaw`
+          CREATE UNIQUE INDEX IF NOT EXISTS "accounts_provider_provider_account_id_key" 
+            ON "accounts"("provider", "provider_account_id")
+        `;
+        console.log("創建 accounts 表索引成功");
+        
+        // 創建 accounts 表的外鍵
+        await prisma.$executeRaw`
+          ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_fkey" 
+            FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE
+        `;
+        console.log("創建 accounts 表外鍵成功");
 
         // 創建 Session 表
+        console.log("開始創建 sessions 表...");
         await prisma.$executeRaw`
           CREATE TABLE IF NOT EXISTS "sessions" (
             "id" TEXT NOT NULL,
@@ -73,29 +92,76 @@ async function createTablesIfNotExist() {
             "user_id" TEXT NOT NULL,
             "expires" TIMESTAMP(3) NOT NULL,
             CONSTRAINT "sessions_pkey" PRIMARY KEY ("id")
-          );
-          CREATE UNIQUE INDEX IF NOT EXISTS "sessions_session_token_key" ON "sessions"("session_token");
-          ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_fkey" 
-            FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          )
         `;
-        console.log("創建 sessions 表成功");
+        console.log("創建 sessions 表基本結構成功");
+        
+        // 創建 sessions 表的索引
+        await prisma.$executeRaw`
+          CREATE UNIQUE INDEX IF NOT EXISTS "sessions_session_token_key" ON "sessions"("session_token")
+        `;
+        console.log("創建 sessions 表索引成功");
+        
+        // 創建 sessions 表的外鍵
+        await prisma.$executeRaw`
+          ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_fkey" 
+            FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE
+        `;
+        console.log("創建 sessions 表外鍵成功");
 
         // 創建 VerificationToken 表
+        console.log("開始創建 verification_tokens 表...");
         await prisma.$executeRaw`
           CREATE TABLE IF NOT EXISTS "verification_tokens" (
             "identifier" TEXT NOT NULL,
             "token" TEXT NOT NULL,
             "expires" TIMESTAMP(3) NOT NULL
-          );
-          CREATE UNIQUE INDEX IF NOT EXISTS "verification_tokens_token_key" ON "verification_tokens"("token");
-          CREATE UNIQUE INDEX IF NOT EXISTS "verification_tokens_identifier_token_key" 
-            ON "verification_tokens"("identifier", "token");
+          )
         `;
-        console.log("創建 verification_tokens 表成功");
+        console.log("創建 verification_tokens 表基本結構成功");
+        
+        // 創建 verification_tokens 表的索引
+        await prisma.$executeRaw`
+          CREATE UNIQUE INDEX IF NOT EXISTS "verification_tokens_token_key" ON "verification_tokens"("token")
+        `;
+        await prisma.$executeRaw`
+          CREATE UNIQUE INDEX IF NOT EXISTS "verification_tokens_identifier_token_key" 
+            ON "verification_tokens"("identifier", "token")
+        `;
+        console.log("創建 verification_tokens 表索引成功");
+
+        // 創建 UserProfile 表
+        console.log("開始創建 user_profiles 表...");
+        await prisma.$executeRaw`
+          CREATE TABLE IF NOT EXISTS "user_profiles" (
+            "id" TEXT NOT NULL,
+            "user_id" TEXT NOT NULL,
+            "api_keys" TEXT,
+            "default_model" TEXT DEFAULT 'gemini',
+            "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updated_at" TIMESTAMP(3) NOT NULL,
+            CONSTRAINT "user_profiles_pkey" PRIMARY KEY ("id")
+          )
+        `;
+        console.log("創建 user_profiles 表基本結構成功");
+        
+        // 創建 user_profiles 表的索引
+        await prisma.$executeRaw`
+          CREATE UNIQUE INDEX IF NOT EXISTS "user_profiles_user_id_key" ON "user_profiles"("user_id")
+        `;
+        console.log("創建 user_profiles 表索引成功");
+        
+        // 創建 user_profiles 表的外鍵
+        await prisma.$executeRaw`
+          ALTER TABLE "user_profiles" ADD CONSTRAINT "user_profiles_user_id_fkey" 
+            FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE
+        `;
+        console.log("創建 user_profiles 表外鍵成功");
 
         console.log("所有必要表格創建成功");
       } catch (sqlError) {
         console.error("SQL 執行錯誤:", sqlError.message);
+        console.error("SQL 錯誤詳情:", sqlError);
       }
     }
   } catch (error) {
@@ -128,8 +194,28 @@ export const authOptions = {
       console.log("Session callback. User:", user.id);
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // 確保重定向使用正確的部署URL
+      console.log("重定向請求:", { url, baseUrl });
+      
+      // 如果URL是相對路徑或者包含部署網址，直接返回
+      if (url.startsWith('/') || url.startsWith(baseUrl)) {
+        return url;
+      }
+      
+      // 如果URL包含localhost，替換為部署網址
+      if (url.includes('localhost')) {
+        return url.replace('http://localhost:3000', baseUrl);
+      }
+      
+      // 默認行為
+      return baseUrl;
+    }
   },
   debug: true,
+  pages: {
+    signIn: "/auth/signin",
+  },
   secret: process.env.NEXTAUTH_SECRET,
 };
 
