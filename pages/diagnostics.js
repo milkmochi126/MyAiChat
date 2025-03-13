@@ -217,6 +217,14 @@ export default function Diagnostics() {
                   >
                     {loading.initOrder ? '初始化中...' : '初始化數據庫 (順序版)'}
                   </button>
+                  
+                  {/* 無需認證初始化連結 */}
+                  <a
+                    href="/no-auth-init"
+                    className="flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  >
+                    直接初始化數據庫 (無需認證)
+                  </a>
                 </div>
                 
                 {error && (
