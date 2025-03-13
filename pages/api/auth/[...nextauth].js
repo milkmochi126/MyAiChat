@@ -6,13 +6,21 @@ import prisma from "../../../lib/prisma";
 // 確保使用正確的部署URL，而不是localhost
 const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
+// 添加日誌以幫助調試
+console.log("NextAuth配置:", {
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+  callbackUrl: `${appUrl}/api/auth/callback/google`,
+  GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI
+});
+
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackUrl: `${appUrl}/api/auth/callback/google`
+      // 優先使用顯式設置的重定向URI，其次使用基於NEXTAUTH_URL的URI
+      callbackUrl: process.env.GOOGLE_REDIRECT_URI || `${appUrl}/api/auth/callback/google`
     }),
   ],
   callbacks: {
@@ -47,6 +55,7 @@ export const authOptions = {
       return baseUrl;
     }
   },
+  debug: true, // 啟用調試模式以獲取更多日誌
   pages: {
     signIn: "/auth/signin",
   },

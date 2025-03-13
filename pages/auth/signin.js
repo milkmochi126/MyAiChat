@@ -19,7 +19,11 @@ export default function SignIn() {
   const handleSignIn = async (provider) => {
     try {
       setIsLoggingIn(true);
-      await signIn(provider, { callbackUrl: "/" });
+      // 獲取部署環境URL或使用相對路徑
+      const callbackUrl = typeof window !== 'undefined' ? 
+        (window.location.origin || '/welcome') : '/welcome';
+      console.log("嘗試登入，回調URL:", callbackUrl);
+      await signIn(provider, { callbackUrl });
     } catch (error) {
       console.error("登入失敗:", error);
       setIsLoggingIn(false);
